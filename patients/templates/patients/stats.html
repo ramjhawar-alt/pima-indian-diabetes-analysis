@@ -1,0 +1,198 @@
+{% extends "patients/base.html" %}
+
+{#
+  stats.html — summary statistics page at /stats/
+
+  Django template filters used here:
+    floatformat:1  — round to 1 decimal
+    floatformat:0  — round to integer
+    widthratio a b 100 — calculate (a / b) * 100 for progress bar widths
+#}
+
+{% block title %}Statistics — Pima Diabetes Explorer{% endblock %}
+{% block nav_stats %}active{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="mb-1"><i class="bi bi-bar-chart-fill text-primary me-2"></i>Dataset Statistics</h2>
+    <p class="text-muted mb-0">Aggregated from {{ overall.total }} patients stored in PostgreSQL</p>
+  </div>
+  <a href="{% url 'patients:list' %}" class="btn btn-outline-primary">
+    <i class="bi bi-people-fill me-1"></i>View All Patients
+  </a>
+</div>
+
+<!-- Top summary cards -->
+<div class="row g-3 mb-4">
+
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat-card shadow-sm text-center h-100">
+      <div class="card-body">
+        <div class="display-6 fw-bold text-primary">{{ overall.total }}</div>
+        <div class="text-muted">Total Patients</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat-card shadow-sm text-center h-100">
+      <div class="card-body">
+        <div class="display-6 fw-bold text-danger">{{ diabetic_pct }}%</div>
+        <div class="text-muted">Diabetic ({{ overall.diabetic_count }} patients)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat-card shadow-sm text-center h-100">
+      <div class="card-body">
+        <div class="display-6 fw-bold text-warning">{{ overall.avg_glucose|floatformat:1 }}</div>
+        <div class="text-muted">Avg Glucose (mg/dL)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-sm-6 col-lg-3">
+    <div class="card stat-card shadow-sm text-center h-100">
+      <div class="card-body">
+        <div class="display-6 fw-bold text-info">{{ overall.avg_age|floatformat:1 }}</div>
+        <div class="text-muted">Avg Age (years {{ overall.min_age }}–{{ overall.max_age }})</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Diabetic vs Non-diabetic comparison table -->
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-light">
+    <h6 class="mb-0"><i class="bi bi-table me-2"></i>Diabetic vs Non-diabetic Comparison</h6>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0">
+      <thead class="table-dark">
+        <tr>
+          <th>Group</th>
+          <th>Count</th>
+          <th>Avg Glucose</th>
+          <th>Avg BMI</th>
+          <th>Avg Age</th>
+          <th>Avg Blood Pressure</th>
+        </tr>
+      </thead>
+      <tbody>
+        {# by_outcome is a queryset of dicts grouped by outcome, one row per group #}
+        {% for group in by_outcome %}
+        <tr>
+          <td>
+            {% if group.outcome %}
+              <span class="badge badge-diabetic">Diabetic</span>
+            {% else %}
+              <span class="badge badge-non-diabetic">Non-diabetic</span>
+            {% endif %}
+          </td>
+          <td>{{ group.count }}</td>
+          <td>{{ group.avg_glucose|floatformat:1 }}</td>
+          <td>{{ group.avg_bmi|floatformat:1 }}</td>
+          <td>{{ group.avg_age|floatformat:1 }}</td>
+          <td>{{ group.avg_blood_pressure|floatformat:1 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="row g-4">
+
+  <!-- Age distribution -->
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-light">
+        <h6 class="mb-0"><i class="bi bi-person-fill me-2"></i>Age Distribution</h6>
+      </div>
+      <div class="card-body">
+        {% for bucket in age_buckets %}
+        <div class="mb-3">
+          <div class="d-flex justify-content-between mb-1">
+            <span class="fw-semibold">{{ bucket.label }}</span>
+            <span class="text-muted">{{ bucket.count }} patients</span>
+          </div>
+          {# widthratio calculates (bucket.count / overall.total) * 100 for the Bootstrap progress bar width #}
+          <div class="progress" style="height: 20px;">
+            <div class="progress-bar bg-primary"
+                 style="width: {% widthratio bucket.count overall.total 100 %}%">
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Overall averages -->
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-light">
+        <h6 class="mb-0"><i class="bi bi-clipboard2-data-fill me-2"></i>Overall Averages</h6>
+      </div>
+      <div class="card-body">
+        <ul class="list-group list-group-flush">
+          <li class="list-group-item d-flex justify-content-between">
+            <span>Glucose</span>
+            <strong>{{ overall.avg_glucose|floatformat:1 }} mg/dL</strong>
+          </li>
+          <li class="list-group-item d-flex justify-content-between">
+            <span>BMI</span>
+            <strong>{{ overall.avg_bmi|floatformat:1 }}</strong>
+          </li>
+          <li class="list-group-item d-flex justify-content-between">
+            <span>Blood Pressure</span>
+            <strong>{{ overall.avg_blood_pressure|floatformat:1 }} mm Hg</strong>
+          </li>
+          <li class="list-group-item d-flex justify-content-between">
+            <span>Insulin</span>
+            <strong>{{ overall.avg_insulin|floatformat:1 }} μU/mL</strong>
+          </li>
+          <li class="list-group-item d-flex justify-content-between">
+            <span>Pregnancies</span>
+            <strong>{{ overall.avg_pregnancies|floatformat:1 }}</strong>
+          </li>
+          <li class="list-group-item d-flex justify-content-between">
+            <span>Age Range</span>
+            <strong>{{ overall.min_age }} – {{ overall.max_age }} years</strong>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Quick filter shortcuts -->
+<div class="card shadow-sm mt-4">
+  <div class="card-header bg-light">
+    <h6 class="mb-0"><i class="bi bi-lightning-fill me-2"></i>Quick Filters</h6>
+  </div>
+  <div class="card-body d-flex flex-wrap gap-2">
+    <a href="{% url 'patients:list' %}?outcome=1" class="btn btn-outline-danger btn-sm">
+      Diabetic patients only
+    </a>
+    <a href="{% url 'patients:list' %}?outcome=0" class="btn btn-outline-success btn-sm">
+      Non-diabetic patients only
+    </a>
+    <a href="{% url 'patients:list' %}?min_glucose=126" class="btn btn-outline-warning btn-sm">
+      High glucose (≥126)
+    </a>
+    <a href="{% url 'patients:list' %}?min_age=50" class="btn btn-outline-secondary btn-sm">
+      Age 50+
+    </a>
+    <a href="{% url 'patients:list' %}?outcome=1&min_glucose=126" class="btn btn-outline-danger btn-sm">
+      Diabetic + High glucose
+    </a>
+  </div>
+</div>
+
+{% endblock %}

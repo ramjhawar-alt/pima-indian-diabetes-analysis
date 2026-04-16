@@ -1,0 +1,140 @@
+{% extends "patients/base.html" %}
+
+<!--
+  detail.html — single patient page at /patients/<id>/
+
+  The 'patient' variable in context is a single Patient model instance.
+  We access its fields with dot notation: {{ patient.glucose }}
+-->
+
+{% block title %}Patient #{{ patient.pk }} — Pima Diabetes Explorer{% endblock %}
+{% block nav_patients %}active{% endblock %}
+
+{% block content %}
+
+<!-- Breadcrumb navigation -->
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'patients:list' %}">Patients</a></li>
+    <li class="breadcrumb-item active">Patient #{{ patient.pk }}</li>
+  </ol>
+</nav>
+
+<!-- Header -->
+<div class="d-flex align-items-center mb-4">
+  <div class="me-3">
+    {% if patient.outcome %}
+      <span class="badge badge-diabetic fs-6 px-3 py-2">Diabetic</span>
+    {% else %}
+      <span class="badge badge-non-diabetic fs-6 px-3 py-2">Non-diabetic</span>
+    {% endif %}
+  </div>
+  <div>
+    <h2 class="mb-0">Patient #{{ patient.pk }}</h2>
+    <p class="text-muted mb-0">Age {{ patient.age }} &mdash; Record from Pima Indian Diabetes Dataset</p>
+  </div>
+</div>
+
+<div class="row g-4">
+
+  <!-- Left column: vital measurements -->
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-primary text-white">
+        <h6 class="mb-0"><i class="bi bi-activity me-2"></i>Vital Measurements</h6>
+      </div>
+      <div class="card-body">
+        <dl class="row mb-0">
+
+          <dt class="col-sm-6 text-muted">Glucose</dt>
+          <dd class="col-sm-6">
+            {{ patient.glucose|floatformat:1 }} mg/dL
+            {# glucose >= 126 mg/dL is the clinical diagnostic threshold for diabetes #}
+            {% if patient.glucose >= 126 %}
+              <span class="badge bg-warning text-dark ms-1">High</span>
+            {% endif %}
+          </dd>
+
+          <dt class="col-sm-6 text-muted">Blood Pressure</dt>
+          <dd class="col-sm-6">{{ patient.blood_pressure|floatformat:1 }} mm Hg</dd>
+
+          <dt class="col-sm-6 text-muted">BMI</dt>
+          <dd class="col-sm-6">
+            {{ patient.bmi|floatformat:1 }}
+            {% if patient.bmi >= 30 %}
+              <span class="badge bg-warning text-dark ms-1">Obese</span>
+            {% elif patient.bmi >= 25 %}
+              <span class="badge bg-info text-dark ms-1">Overweight</span>
+            {% else %}
+              <span class="badge bg-success ms-1">Normal</span>
+            {% endif %}
+          </dd>
+
+          <dt class="col-sm-6 text-muted">Skin Thickness</dt>
+          <dd class="col-sm-6">{{ patient.skin_thickness|floatformat:1 }} mm</dd>
+
+          <dt class="col-sm-6 text-muted">Insulin</dt>
+          <dd class="col-sm-6">{{ patient.insulin|floatformat:1 }} μU/mL</dd>
+
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right column: demographic & genetic -->
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header bg-secondary text-white">
+        <h6 class="mb-0"><i class="bi bi-person-fill me-2"></i>Demographic & Genetic</h6>
+      </div>
+      <div class="card-body">
+        <dl class="row mb-0">
+
+          <dt class="col-sm-6 text-muted">Age</dt>
+          <dd class="col-sm-6">{{ patient.age }} years</dd>
+
+          <dt class="col-sm-6 text-muted">Pregnancies</dt>
+          <dd class="col-sm-6">{{ patient.pregnancies }}</dd>
+
+          <dt class="col-sm-6 text-muted">Diabetes Pedigree</dt>
+          <dd class="col-sm-6">
+            {{ patient.diabetes_pedigree|floatformat:3 }}
+            <small class="text-muted d-block">Genetic risk score (higher = more family history)</small>
+          </dd>
+
+          <dt class="col-sm-6 text-muted">Outcome</dt>
+          <dd class="col-sm-6">
+            {% if patient.outcome %}
+              <strong class="text-danger">Diabetes diagnosed</strong>
+            {% else %}
+              <strong class="text-success">No diabetes</strong>
+            {% endif %}
+          </dd>
+
+        </dl>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Navigation between patients -->
+<div class="d-flex justify-content-between mt-4">
+  {% if patient.pk > 1 %}
+    <a href="{% url 'patients:detail' patient.pk|add:'-1' %}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i>Previous Patient
+    </a>
+  {% else %}
+    <span></span>
+  {% endif %}
+
+  <a href="{% url 'patients:list' %}" class="btn btn-primary">
+    <i class="bi bi-list me-1"></i>Back to All Patients
+  </a>
+
+  <a href="{% url 'patients:detail' patient.pk|add:'1' %}" class="btn btn-outline-secondary">
+    Next Patient<i class="bi bi-arrow-right ms-1"></i>
+  </a>
+</div>
+
+{% endblock %}
