@@ -1,0 +1,326 @@
+{% extends "patients/base.html" %}
+{% block title %}Charts — Pima Diabetes Explorer{% endblock %}
+{% block nav_charts %}active{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h2 class="mb-1"><i class="bi bi-graph-up text-primary me-2"></i>Data Visualizations</h2>
+    <p class="text-muted mb-0">
+      Live charts powered by real PostgreSQL data — the same charts a healthtech dashboard would show.
+    </p>
+  </div>
+</div>
+
+{# Loading spinner shown while the API fetches data #}
+<div id="loading" class="text-center py-5">
+  <div class="spinner-border text-primary" role="status"></div>
+  <p class="mt-2 text-muted">Loading chart data from PostgreSQL…</p>
+</div>
+
+<div id="charts-container" style="display:none;">
+
+  {# Row 1: Outcome doughnut + Average comparison bar chart #}
+  <div class="row g-4 mb-4">
+
+    <div class="col-md-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-light">
+          <h6 class="mb-0"><i class="bi bi-pie-chart-fill me-2 text-primary"></i>Diabetic vs Non-Diabetic Split</h6>
+        </div>
+        <div class="card-body d-flex align-items-center justify-content-center">
+          <div style="max-width: 280px; width: 100%;">
+            <canvas id="outcomeChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-8">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-light">
+          <h6 class="mb-0"><i class="bi bi-bar-chart-fill me-2 text-primary"></i>Average Clinical Values: Diabetic vs Non-Diabetic</h6>
+        </div>
+        <div class="card-body">
+          <canvas id="comparisonChart" height="120"></canvas>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  {# Row 2: Glucose histogram #}
+  <div class="row g-4 mb-4">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header bg-light">
+          <h6 class="mb-0">
+            <i class="bi bi-bar-chart-steps me-2 text-primary"></i>
+            Glucose Distribution — Diabetic vs Non-Diabetic
+            <small class="text-muted ms-2">vertical dashed line = clinical threshold (126 mg/dL)</small>
+          </h6>
+        </div>
+        <div class="card-body">
+          <canvas id="glucoseChart" height="70"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# Row 3: Age distribution + Scatter plot #}
+  <div class="row g-4 mb-4">
+
+    <div class="col-md-5">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-light">
+          <h6 class="mb-0"><i class="bi bi-people-fill me-2 text-primary"></i>Patient Count by Age Group</h6>
+        </div>
+        <div class="card-body">
+          <canvas id="ageChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-7">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-light">
+          <h6 class="mb-0">
+            <i class="bi bi-scatter-chart me-2 text-primary"></i>BMI vs Glucose — Each dot is one patient
+          </h6>
+        </div>
+        <div class="card-body">
+          <canvas id="scatterChart" height="130"></canvas>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+{# Chart.js 4 via CDN — a JavaScript charting library #}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+<script>
+/*
+  How this works:
+  1. The page loads (HTML only, no data yet)
+  2. This JavaScript runs: it calls fetch('/charts/api/') — our Django JSON view
+  3. Django queries PostgreSQL and returns JSON
+  4. We parse that JSON and pass it to Chart.js to render each chart
+
+  This pattern (page → JS fetch → JSON API → chart) is how every modern
+  dashboard works: React, Vue, plain JS — they all do this.
+*/
+
+async function loadCharts() {
+  const response = await fetch("{% url 'charts_api' %}");
+  const data = await response.json();
+
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('charts-container').style.display = 'block';
+
+  const DIABETIC_COLOR     = 'rgba(220, 53, 69, 0.75)';
+  const NON_DIABETIC_COLOR = 'rgba(25, 135, 84, 0.75)';
+  const DIABETIC_BORDER    = 'rgba(220, 53, 69, 1)';
+  const NON_DIABETIC_BORDER = 'rgba(25, 135, 84, 1)';
+
+  // ── Chart 1: Doughnut — outcome split ───────────────────────────────────
+  new Chart(document.getElementById('outcomeChart'), {
+    type: 'doughnut',
+    data: {
+      labels: data.outcome.labels,
+      datasets: [{
+        data: data.outcome.counts,
+        backgroundColor: [DIABETIC_COLOR, NON_DIABETIC_COLOR],
+        borderColor: [DIABETIC_BORDER, NON_DIABETIC_BORDER],
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+              const pct = ((ctx.parsed / total) * 100).toFixed(1);
+              return ` ${ctx.label}: ${ctx.parsed} (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // ── Chart 2: Grouped bar — average values by outcome ─────────────────────
+  new Chart(document.getElementById('comparisonChart'), {
+    type: 'bar',
+    data: {
+      labels: data.comparison.labels,
+      datasets: [
+        {
+          label: 'Diabetic',
+          data: data.comparison.diabetic,
+          backgroundColor: DIABETIC_COLOR,
+          borderColor: DIABETIC_BORDER,
+          borderWidth: 1,
+        },
+        {
+          label: 'Non-diabetic',
+          data: data.comparison.non_diabetic,
+          backgroundColor: NON_DIABETIC_COLOR,
+          borderColor: NON_DIABETIC_BORDER,
+          borderWidth: 1,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'top' } },
+      scales: {
+        y: { beginAtZero: true, title: { display: true, text: 'Average value' } }
+      }
+    }
+  });
+
+  // ── Chart 3: Stacked histogram — glucose distribution ────────────────────
+  const glucoseCtx = document.getElementById('glucoseChart');
+  const glucoseChart = new Chart(glucoseCtx, {
+    type: 'bar',
+    data: {
+      labels: data.glucose.labels,
+      datasets: [
+        {
+          label: 'Diabetic',
+          data: data.glucose.diabetic,
+          backgroundColor: DIABETIC_COLOR,
+          borderColor: DIABETIC_BORDER,
+          borderWidth: 1,
+        },
+        {
+          label: 'Non-diabetic',
+          data: data.glucose.non_diabetic,
+          backgroundColor: NON_DIABETIC_COLOR,
+          borderColor: NON_DIABETIC_BORDER,
+          borderWidth: 1,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'top' },
+        // Vertical annotation line at glucose=126 (the clinical threshold)
+        // We draw it as an afterDraw plugin
+      },
+      scales: {
+        x: {
+          stacked: true,
+          title: { display: true, text: 'Glucose range (mg/dL)' },
+          ticks: { maxRotation: 45 }
+        },
+        y: { stacked: true, title: { display: true, text: 'Number of patients' } }
+      }
+    },
+    plugins: [{
+      id: 'thresholdLine',
+      afterDraw(chart) {
+        // Draw a vertical dashed line at the "126 mg/dL" bucket
+        const labels = chart.data.labels;
+        // Find label that starts with "120" (the 120-130 bucket)
+        const idx = labels.findIndex(l => l.startsWith('120'));
+        if (idx < 0) return;
+        const { ctx, chartArea: { top, bottom }, scales: { x } } = chart;
+        const xPos = x.getPixelForValue(idx) + (x.getPixelForValue(1) - x.getPixelForValue(0)) * 0.6;
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([6, 4]);
+        ctx.strokeStyle = 'rgba(220, 53, 69, 0.9)';
+        ctx.lineWidth = 2;
+        ctx.moveTo(xPos, top);
+        ctx.lineTo(xPos, bottom);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(220, 53, 69, 0.9)';
+        ctx.font = '11px sans-serif';
+        ctx.fillText('← 126 threshold', xPos + 4, top + 16);
+        ctx.restore();
+      }
+    }]
+  });
+
+  // ── Chart 4: Grouped bar — age distribution ───────────────────────────────
+  new Chart(document.getElementById('ageChart'), {
+    type: 'bar',
+    data: {
+      labels: data.age.labels,
+      datasets: [
+        {
+          label: 'Diabetic',
+          data: data.age.diabetic,
+          backgroundColor: DIABETIC_COLOR,
+          borderColor: DIABETIC_BORDER,
+          borderWidth: 1,
+        },
+        {
+          label: 'Non-diabetic',
+          data: data.age.non_diabetic,
+          backgroundColor: NON_DIABETIC_COLOR,
+          borderColor: NON_DIABETIC_BORDER,
+          borderWidth: 1,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'top' } },
+      scales: {
+        x: { title: { display: true, text: 'Age group' } },
+        y: { beginAtZero: true, title: { display: true, text: 'Number of patients' } }
+      }
+    }
+  });
+
+  // ── Chart 5: Scatter plot — BMI vs Glucose ────────────────────────────────
+  new Chart(document.getElementById('scatterChart'), {
+    type: 'scatter',
+    data: {
+      datasets: [
+        {
+          label: 'Diabetic',
+          data: data.scatter.diabetic,
+          backgroundColor: 'rgba(220, 53, 69, 0.5)',
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        },
+        {
+          label: 'Non-diabetic',
+          data: data.scatter.non_diabetic,
+          backgroundColor: 'rgba(25, 135, 84, 0.4)',
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'top' } },
+      scales: {
+        x: {
+          title: { display: true, text: 'Glucose (mg/dL)' },
+          min: 40, max: 210
+        },
+        y: {
+          title: { display: true, text: 'BMI' },
+          min: 15, max: 68
+        }
+      }
+    }
+  });
+}
+
+loadCharts();
+</script>
+
+{% endblock %}
